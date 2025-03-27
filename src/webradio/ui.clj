@@ -3,7 +3,7 @@
             [webradio.player :as player]
             [clojure.java.io :as io])
   (:import [javax.swing JFrame JList JScrollPane JButton JPanel JLabel]
-           [java.awt Font FontFormatException]
+           [java.awt Font]
            [java.awt Color BorderLayout FlowLayout]
            [javax.swing.border LineBorder]))
 
