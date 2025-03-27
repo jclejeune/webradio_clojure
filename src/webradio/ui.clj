@@ -1,105 +1,66 @@
 (ns webradio.ui
   (:require [webradio.model :as model]
             [webradio.player :as player]
-            [clojure.java.io :as io])
-  (:import [javax.swing JFrame JList JScrollPane JButton JPanel JLabel]
-           [java.awt Font]
-           [java.awt Color BorderLayout FlowLayout]
-           [javax.swing.border LineBorder]))
-
-(defn get-selected-radio-index [radio-list]
-  (.getSelectedIndex radio-list))
-
-(defn load-digital-font [size]
-  (try
-    (let [font-file (io/resource "fonts/VCR.ttf")]
-      (if font-file
-        (let [digital-font (Font/createFont Font/TRUETYPE_FONT (io/input-stream font-file))]
-          (.deriveFont digital-font (float size)))
-        (Font. "Monospaced" Font/BOLD size)))
-    (catch Exception _
-      (Font. "Monospaced" Font/BOLD size))))
+            [webradio.theme :as theme])
+  (:import [javax.swing JFrame JList JScrollPane JPanel]
+           [javax.swing.event ListSelectionListener]
+           [java.awt BorderLayout FlowLayout]
+           [java.awt.event ActionListener]))
 
 (defn create-ui []
+  (theme/apply-dark-theme)
+
   (let [frame (JFrame. "WebRadio Player")
         radio-list (JList. (into-array String (map :name @model/radios)))
         scroll-pane (JScrollPane. radio-list)
+        digital-font (theme/load-digital-font 24)
+        status-label (theme/styled-label "--" digital-font theme/dark-theme-colors)
+        play-button (theme/styled-button "▶" theme/dark-theme-colors)
+        prev-button (theme/styled-button "⏮" theme/dark-theme-colors)
+        next-button (theme/styled-button "⏭" theme/dark-theme-colors)
+        stop-button (theme/styled-button "⏹" theme/dark-theme-colors)
+        control-panel (JPanel.)]
 
-        play-button (JButton. "▶")
-        prev-button (JButton. "⏮")  ; Previous button
-        next-button (JButton. "⏭")  ; Next button
-        stop-button (JButton. "⏹")  ; Stop button
-
-        control-panel (JPanel.)
-        digital-font (load-digital-font 24)
-        status-label (JLabel. "--")]
-
-    ;; Autoradio-style status label
-    (doto status-label
-      (.setOpaque true)
-      (.setBackground (Color. 0 0 0))  ; Very dark background
-      (.setForeground (Color. 250 139 1))   ; Green text
-      (.setFont digital-font)
-      (.setBorder (LineBorder. (Color. 80 80 80) 2))
-      (.setHorizontalAlignment JLabel/CENTER)
-      (.setPreferredSize (java.awt.Dimension. 300 100)))
-
-    ;; List selection listener
+    ;; Gestion des événements
     (.addListSelectionListener radio-list
-                               (reify javax.swing.event.ListSelectionListener
-                                 (valueChanged [_ event]
-                                   (when-not (.getValueIsAdjusting event)
-                                     (let [selected-index (get-selected-radio-index radio-list)
-                                           selected-radio (get @model/radios selected-index)]
+                               (reify ListSelectionListener
+                                 (valueChanged [_ e]
+                                   (when-not (.getValueIsAdjusting e)
+                                     (let [index (.getSelectedIndex radio-list)]
+                                       (when (>= index 0)
+                                         (player/play-radio (nth @model/radios index))
+                                         (.setText status-label (.getSelectedValue radio-list))))))))
 
-              ;; Enable/disable prev/next buttons based on selection
-                                       (doto prev-button
-                                         (.setEnabled (not= selected-index 0)))
-                                       (doto next-button
-                                         (.setEnabled (not= selected-index (dec (count @model/radios)))))
-
-                                       (player/play-radio selected-radio)
-                                       (.setText status-label (:name selected-radio)))))))
-
-    ;; Previous button listener
-    (.addActionListener prev-button
-                        (reify java.awt.event.ActionListener
-                          (actionPerformed [_ _]
-                            (let [current-index (get-selected-radio-index radio-list)]
-                              (when (pos? current-index)
-                                (.setSelectedIndex radio-list (dec current-index)))))))
-
-    ;; Next button listener
-    (.addActionListener next-button
-                        (reify java.awt.event.ActionListener
-                          (actionPerformed [_ _]
-                            (let [current-index (get-selected-radio-index radio-list)]
-                              (when (< current-index (dec (count @model/radios)))
-                                (.setSelectedIndex radio-list (inc current-index)))))))
-
-    ;; Play button listener
     (.addActionListener play-button
-                        (reify java.awt.event.ActionListener
+                        (reify ActionListener
                           (actionPerformed [_ _]
-                            (when-let [selected-radio (first (filter #(= (.getSelectedValue radio-list) (:name %)) @model/radios))]
-                              (player/play-radio selected-radio)
-                              (.setText status-label  (:name selected-radio))))))
+                            (when-let [index (.getSelectedIndex radio-list)]
+                              (player/play-radio (nth @model/radios index))))))
 
-    ;; Stop button listener
     (.addActionListener stop-button
-                        (reify java.awt.event.ActionListener
+                        (reify ActionListener
                           (actionPerformed [_ _]
                             (player/stop-radio)
                             (.setText status-label "--"))))
 
-    ;; Initial button states
-    (doto prev-button (.setEnabled false))
-    (doto next-button
-      (.setEnabled (> (count @model/radios) 1)))
+    (.addActionListener prev-button
+                        (reify ActionListener
+                          (actionPerformed [_ _]
+                            (let [current (.getSelectedIndex radio-list)]
+                              (when (> current 0)
+                                (.setSelectedIndex radio-list (dec current)))))))
+
+    (.addActionListener next-button
+                        (reify ActionListener
+                          (actionPerformed [_ _]
+                            (let [current (.getSelectedIndex radio-list)
+                                  max-index (dec (count @model/radios))]
+                              (when (< current max-index)
+                                (.setSelectedIndex radio-list (inc current)))))))
 
     (doto control-panel
       (.setLayout (FlowLayout.))
-      (.setBackground (Color. 240 240 240))
+      (.setBackground (:background theme/dark-theme-colors))
       (.add prev-button)
       (.add play-button)
       (.add next-button)
@@ -110,6 +71,6 @@
       (.add scroll-pane BorderLayout/CENTER)
       (.add control-panel BorderLayout/SOUTH)
       (.add status-label BorderLayout/NORTH)
-      (.setSize 400 400)
+      (.setSize 400 500)
       (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)
       (.setVisible true))))
