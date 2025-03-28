@@ -2,7 +2,10 @@
   (:require [clojure.java.io :as io])  ; Ajout du require manquant
   (:import [java.awt Color Font]
            [javax.swing UIManager]
+           [javax.swing JButton]
+           [java.awt Color Graphics2D RenderingHints]
            [javax.swing.border LineBorder EmptyBorder]))
+
 
 ;; Ajouter la fonction load-digital-font ici
 (defn load-digital-font [size]
@@ -55,3 +58,53 @@
     (.setBackground (:button-bg colors))
     (.setForeground (:button-fg colors))
     (.setBorder (EmptyBorder. 5 15 5 15))))
+
+(defn create-icon-button [draw-fn colors]
+  (doto (proxy [JButton] []
+          (paintComponent [^Graphics2D g]
+            (proxy-super paintComponent g)
+            (doto g
+              (.setRenderingHint RenderingHints/KEY_ANTIALIASING RenderingHints/VALUE_ANTIALIAS_ON)
+              (.setColor (:button-fg colors)))
+            (draw-fn g (.getWidth this) (.getHeight this))))
+    (.setBackground (:button-bg colors))
+    (.setContentAreaFilled false)
+    (.setOpaque true)
+    (.setBorderPainted false)))
+
+(defn draw-play-icon [^Graphics2D g width height]
+  (let [x (/ width 3)
+        y (/ height 3)
+        w (/ width 3)
+        h (/ height 3)]
+    (.fillPolygon g
+                  (int-array [x (+ x w) x])
+                  (int-array [y (+ y (/ h 2)) (+ y h)])
+                  3)))
+
+(defn draw-stop-icon [^Graphics2D g width]
+  (let [margin (/ width 4)
+        stop-width (- width (* 2 margin))]
+    (.fillRect g margin margin stop-width stop-width)))
+
+(defn draw-prev-icon [^Graphics2D g width height]
+  (let [x (/ width 3)
+        y (/ height 3)
+        w (/ width 3)
+        h (/ height 3)]
+    (.fillRect g x y (/ w 3) h)
+    (.fillPolygon g
+                  (int-array [(+ x (/ w 3)) (+ x w) (+ x (/ w 3))])
+                  (int-array [y (+ y (/ h 2)) (+ y h)])
+                  3)))
+
+(defn draw-next-icon [^Graphics2D g width height]
+  (let [x (/ width 3)
+        y (/ height 3)
+        w (/ width 3)
+        h (/ height 3)]
+    (.fillRect g (- width (/ width 3)) y (/ w 3) h)
+    (.fillPolygon g
+                  (int-array [x (+ x w) (+ x w)])
+                  (int-array [y (+ y (/ h 2)) (+ y h)])
+                  3)))
