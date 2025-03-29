@@ -40,3 +40,32 @@
       (swap! radios conj new-radio)
       (save-radios!)
       true)))
+
+(defn update-radio! [old-name new-name new-url]
+  (try
+    (let [updated-radios (map (fn [radio]
+                                (if (= (:name radio) old-name)
+                                  {:name new-name :url new-url}
+                                  radio))
+                              @radios)]
+      (if (= updated-radios @radios)
+        (println "Radio not found or no changes.")
+        (do
+          (reset! radios updated-radios)
+          (save-radios!)
+          (println (str "Radio " old-name " updated.")))))
+    (catch Exception e
+      (println "Error updating radio:" (.getMessage e)))))
+
+
+(defn delete-radio! [name]
+  (try
+    (let [updated-radios (remove #(= (:name %) name) @radios)]
+      (if (= (count updated-radios) (count @radios))
+        (println "Radio not found.")
+        (do
+          (reset! radios updated-radios)
+          (save-radios!)
+          (println (str "Radio " name " deleted.")))))
+    (catch Exception e
+      (println "Error deleting radio:" (.getMessage e)))))

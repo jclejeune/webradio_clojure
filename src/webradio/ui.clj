@@ -62,7 +62,7 @@
       (.add url-field))
 
     (doto form-panel
-      (.add add-button BorderLayout/EAST)
+      (.add add-button BorderLayout/WEST)
       (.add add-panel BorderLayout/CENTER))
 
     ;; Configuration des panneaux de contrôle (remplacer les boutons par des icônes)
