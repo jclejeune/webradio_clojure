@@ -2,7 +2,7 @@
   (:require [webradio.model :as model]
             [webradio.player :as player]
             [webradio.theme :as theme])
-  (:import [javax.swing JFrame JList JScrollPane JPanel JTextField JLabel JOptionPane DefaultListModel]
+  (:import [javax.swing JFrame JList JScrollPane JPanel JTextField JLabel JOptionPane DefaultListModel ImageIcon]
            [javax.swing.event ListSelectionListener]
            [java.awt BorderLayout FlowLayout GridLayout]
            [java.awt.event ActionListener]))
@@ -13,24 +13,41 @@
       (.addElement model (:name radio)))
     (.setModel jlist model)))
 
+(defn resize-icon [icon height]
+  (let [image (.getImage icon)
+        width  (int (* (/ height (float (.getHeight image))) (.getWidth image)))]
+    (ImageIcon. (.getScaledInstance image width height java.awt.Image/SCALE_SMOOTH))))
+
+;; Redimensionnement des icônes
+(def play-button-icon (resize-icon (ImageIcon. "resources/images/play-icon.png") 25))
+(def stop-button-icon (resize-icon (ImageIcon. "resources/images/stop-icon.png") 25))
+(def forward-button-icon (resize-icon (ImageIcon. "resources/images/forward-icon.png") 25))
+(def backward-button-icon (resize-icon (ImageIcon. "resources/images/backward-icon.png") 25))
+
 (defn create-ui []
   (theme/apply-dark-theme)
 
   (let [frame (JFrame. "WebRadio Player")
         add-panel (JPanel. (GridLayout. 2 2 5 5))
-        name-field (JTextField.)
-        url-field (JTextField.)
-        add-button (theme/styled-button "+ Ajouter" theme/dark-theme-colors)
+        name-field (doto (JTextField. 20)
+                     (.setFont (java.awt.Font. "Arial" java.awt.Font/ITALIC 12))
+                     (.setForeground (:foreground theme/dark-theme-colors))  ; Fix: use the Color object here
+                     (.setText "Radio")) ; Placeholder en italique
+        url-field (doto (JTextField. 20)
+                    (.setFont (java.awt.Font. "Arial" java.awt.Font/ITALIC 12))
+                    (.setForeground (:foreground theme/dark-theme-colors))  ; Fix: use the Color object here
+                    (.setText "URL")) ; Placeholder en italique
+        add-button (theme/styled-button "+Add" theme/dark-theme-colors)
         radio-list (JList.)
         scroll-pane (JScrollPane. radio-list)
         digital-font (theme/load-digital-font 24)
         status-label (theme/styled-label "--" digital-font theme/dark-theme-colors)
 
-        ; Restore to previous button creation method
-        play-button (theme/styled-button "▶" theme/dark-theme-colors)
-        prev-button (theme/styled-button "⏮" theme/dark-theme-colors)
-        next-button (theme/styled-button "⏭" theme/dark-theme-colors)
-        stop-button (theme/styled-button "⏹" theme/dark-theme-colors)
+        ;; Création des JLabel pour les icônes
+        play-label (JLabel. play-button-icon)
+        stop-label (JLabel. stop-button-icon)
+        next-label (JLabel. forward-button-icon)
+        prev-label (JLabel. backward-button-icon)
 
         control-panel (JPanel.)
         form-panel (JPanel. (BorderLayout.))
@@ -39,16 +56,23 @@
     ;; Configuration du formulaire
     (doto add-panel
       (.setBackground (:background theme/dark-theme-colors))
-      (.add (JLabel. "Nom:"))
+      ;; (.add (JLabel. "Radio:"))
       (.add name-field)
-      (.add (JLabel. "URL:"))
+      ;; (.add (JLabel. "URL:"))
       (.add url-field))
 
-    ;; Configuration des boutons
     (doto form-panel
+      (.add add-button BorderLayout/EAST)
+      (.add add-panel BorderLayout/CENTER))
+
+    ;; Configuration des panneaux de contrôle (remplacer les boutons par des icônes)
+    (doto control-panel
+      (.setLayout (FlowLayout.))
       (.setBackground (:background theme/dark-theme-colors))
-      (.add add-panel BorderLayout/CENTER)
-      (.add add-button BorderLayout/EAST))
+      (.add prev-label)
+      (.add play-label)
+      (.add next-label)
+      (.add stop-label))
 
     ;; Initialisation de la liste
     (update-radio-list! radio-list @model/radios)
@@ -64,40 +88,40 @@
                (player/play-radio (nth @model/radios index))
                (.setText status-label (.getSelectedValue radio-list))))))))
 
-    ;; Play Button
-    (.addActionListener play-button
-                        (reify ActionListener
-                          (actionPerformed [_ _]
-                            (let [index (.getSelectedIndex radio-list)]
-                              (when (>= index 0)
-                                (player/play-radio (nth @model/radios index))
-                                (.setText status-label (.getSelectedValue radio-list)))))))
+    ;; Play Label Action
+    (.addMouseListener play-label
+                       (proxy [java.awt.event.MouseAdapter] []
+                         (mouseClicked [e]
+                           (let [index (.getSelectedIndex radio-list)]
+                             (when (>= index 0)
+                               (player/play-radio (nth @model/radios index))
+                               (.setText status-label (.getSelectedValue radio-list)))))))
 
-    ;; Stop Button
-    (.addActionListener stop-button
-                        (reify ActionListener
-                          (actionPerformed [_ _]
-                            (player/stop-radio)
-                            (.setText status-label "--"))))
+    ;; Stop Label Action
+    (.addMouseListener stop-label
+                       (proxy [java.awt.event.MouseAdapter] []
+                         (mouseClicked [e]
+                           (player/stop-radio)
+                           (.setText status-label "--"))))
 
-    ;; Previous Button
-    (.addActionListener prev-button
-                        (reify ActionListener
-                          (actionPerformed [_ _]
-                            (let [current (.getSelectedIndex radio-list)]
-                              (when (> current 0)
-                                (.setSelectedIndex radio-list (dec current)))))))
+    ;; Previous Label Action
+    (.addMouseListener prev-label
+                       (proxy [java.awt.event.MouseAdapter] []
+                         (mouseClicked [e]
+                           (let [current (.getSelectedIndex radio-list)]
+                             (when (> current 0)
+                               (.setSelectedIndex radio-list (dec current)))))))
 
-    ;; Next Button
-    (.addActionListener next-button
-                        (reify ActionListener
-                          (actionPerformed [_ _]
-                            (let [current (.getSelectedIndex radio-list)
-                                  max-index (dec (count @model/radios))]
-                              (when (< current max-index)
-                                (.setSelectedIndex radio-list (inc current)))))))
+    ;; Next Label Action
+    (.addMouseListener next-label
+                       (proxy [java.awt.event.MouseAdapter] []
+                         (mouseClicked [e]
+                           (let [current (.getSelectedIndex radio-list)
+                                 max-index (dec (count @model/radios))]
+                             (when (< current max-index)
+                               (.setSelectedIndex radio-list (inc current)))))))
 
-    ;; Add Button
+    ;; Add Button Action
     (.addActionListener add-button
                         (reify ActionListener
                           (actionPerformed [_ _]
@@ -112,15 +136,6 @@
                                                                "Veuillez saisir un nom et une URL valides"
                                                                "Erreur"
                                                                JOptionPane/ERROR_MESSAGE))))))
-
-    ;; Configuration des panneaux
-    (doto control-panel
-      (.setLayout (FlowLayout.))
-      (.setBackground (:background theme/dark-theme-colors))
-      (.add prev-button)
-      (.add play-button)
-      (.add next-button)
-      (.add stop-button))
 
     ;; Assemblage final
     (doto main-panel
