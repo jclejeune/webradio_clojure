@@ -13,16 +13,11 @@
       (.addElement model (:name radio)))
     (.setModel jlist model)))
 
-(defn resize-icon [icon height]
-  (let [image (.getImage icon)
-        width  (int (* (/ height (float (.getHeight image))) (.getWidth image)))]
-    (ImageIcon. (.getScaledInstance image width height java.awt.Image/SCALE_SMOOTH))))
-
 ;; Redimensionnement des icônes
-(def play-button-icon (resize-icon (ImageIcon. "resources/images/play-icon.png") 25))
-(def stop-button-icon (resize-icon (ImageIcon. "resources/images/stop-icon.png") 25))
-(def forward-button-icon (resize-icon (ImageIcon. "resources/images/forward-icon.png") 25))
-(def backward-button-icon (resize-icon (ImageIcon. "resources/images/backward-icon.png") 25))
+(def play-button-icon (ImageIcon. "resources/images/play-icon.png"))
+(def stop-button-icon (ImageIcon. "resources/images/stop-icon.png"))
+(def forward-button-icon (ImageIcon. "resources/images/forward-icon.png"))
+(def backward-button-icon (ImageIcon. "resources/images/backward-icon.png"))
 
 (defn create-ui []
   (theme/apply-dark-theme)
