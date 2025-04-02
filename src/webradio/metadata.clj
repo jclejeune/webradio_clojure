@@ -1,6 +1,7 @@
 (ns webradio.metadata
   (:import [java.net URL]
            [java.io BufferedInputStream]
+           [java.nio.charset Charset]
            [java.util.concurrent Executors TimeUnit]))
 
 ;; Atomes pour stocker l'état du fetcher
@@ -41,7 +42,7 @@
                 (when (pos? metadata-length)
                   (let [metadata-buffer (byte-array metadata-length)]
                     (.read stream metadata-buffer 0 metadata-length)
-                    (let [metadata (String. metadata-buffer "utf-8")
+                    (let [metadata (String. metadata-buffer 0 metadata-length (Charset/forName "UTF-8"))
                           title (extract-title metadata)]
                       (when (and title (not= title @last-title))
                         (reset! last-title title)
