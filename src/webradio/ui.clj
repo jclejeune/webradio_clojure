@@ -2,16 +2,76 @@
   (:require [webradio.model :as model]
             [webradio.player :as player]
             [webradio.theme :as theme])
-  (:import [javax.swing JFrame JList JScrollPane JPanel JTextField JLabel JOptionPane DefaultListModel ImageIcon]
+  (:import [javax.swing JFrame JList JScrollPane JPanel JTextField JLabel JOptionPane DefaultListModel ImageIcon JPopupMenu JMenuItem]
            [javax.swing.event ListSelectionListener]
            [java.awt BorderLayout FlowLayout GridLayout]
-           [java.awt.event ActionListener]))
+           [java.awt.event ActionListener MouseAdapter]))
 
 (defn- update-radio-list! [jlist radios]
   (let [model (DefaultListModel.)]
     (doseq [radio radios]
       (.addElement model (:name radio)))
     (.setModel jlist model)))
+
+;; Dialogue pour modifier une radio
+(defn- show-edit-dialog [frame radio-name]
+  (let [current-radio (first (filter #(= (:name %) radio-name) @model/radios))
+        name-field (JTextField. (:name current-radio) 20)
+        url-field (JTextField. (:url current-radio) 20)
+        panel (JPanel. (GridLayout. 4 4 4 4))]
+
+    (doto panel
+      (.add (JLabel. "Nom:"))
+      (.add name-field)
+      (.add (JLabel. "URL:"))
+      (.add url-field))
+
+    (let [result (JOptionPane/showConfirmDialog frame panel "Modifier la radio" JOptionPane/OK_CANCEL_OPTION)]
+      (when (= result JOptionPane/OK_OPTION)
+        (let [new-name (.getText name-field)
+              new-url (.getText url-field)]
+          (when (and (not-empty new-name) (not-empty new-url))
+            (model/update-radio! radio-name new-name new-url)
+            true))))))
+
+;; Dialogue de confirmation pour supprimer
+(defn- show-delete-dialog [frame radio-name]
+  (let [result (JOptionPane/showConfirmDialog
+                frame
+                (str "Êtes-vous sûr de vouloir supprimer la radio '" radio-name "' ?")
+                "Confirmer la suppression"
+                JOptionPane/YES_NO_OPTION
+                JOptionPane/QUESTION_MESSAGE)]
+    (= result JOptionPane/YES_OPTION)))
+
+;; Création du menu contextuel
+(defn- create-popup-menu [frame radio-list]
+  (let [popup (JPopupMenu.)
+        edit-item (JMenuItem. "Modifier")
+        delete-item (JMenuItem. "Supprimer")]
+
+    ;; Action pour modifier
+    (.addActionListener edit-item
+                        (reify ActionListener
+                          (actionPerformed [_ _]
+                            (let [selected-name (.getSelectedValue radio-list)]
+                              (when selected-name
+                                (when (show-edit-dialog frame selected-name)
+                                  (update-radio-list! radio-list @model/radios)))))))
+
+    ;; Action pour supprimer
+    (.addActionListener delete-item
+                        (reify ActionListener
+                          (actionPerformed [_ _]
+                            (let [selected-name (.getSelectedValue radio-list)]
+                              (when selected-name
+                                (when (show-delete-dialog frame selected-name)
+                                  (model/delete-radio! selected-name)
+                                  (update-radio-list! radio-list @model/radios)))))))
+
+    (doto popup
+      (.add edit-item)
+      (.add delete-item))))
 
 ;; Redimensionnement des icônes
 (def play-button-icon (ImageIcon. "resources/images/play-icon.png"))
@@ -26,12 +86,12 @@
         add-panel (JPanel. (GridLayout. 2 2 5 5))
         name-field (doto (JTextField. 20)
                      (.setFont (java.awt.Font. "Arial" java.awt.Font/ITALIC 12))
-                     (.setForeground (:foreground theme/dark-theme-colors))  ; Fix: use the Color object here
-                     (.setText "Radio")) ; Placeholder en italique
+                     (.setForeground (:foreground theme/dark-theme-colors))
+                     (.setText "Radio"))
         url-field (doto (JTextField. 20)
                     (.setFont (java.awt.Font. "Arial" java.awt.Font/ITALIC 12))
-                    (.setForeground (:foreground theme/dark-theme-colors))  ; Fix: use the Color object here
-                    (.setText "URL")) ; Placeholder en italique
+                    (.setForeground (:foreground theme/dark-theme-colors))
+                    (.setText "URL"))
         add-button (theme/styled-button "+Add" theme/dark-theme-colors)
         radio-list (JList.)
         scroll-pane (JScrollPane. radio-list)
@@ -46,21 +106,22 @@
 
         control-panel (JPanel.)
         form-panel (JPanel. (BorderLayout.))
-        main-panel (JPanel. (BorderLayout.))]
+        main-panel (JPanel. (BorderLayout.))
+
+        ;; Création du menu contextuel
+        popup-menu (create-popup-menu frame radio-list)]
 
     ;; Configuration du formulaire
     (doto add-panel
       (.setBackground (:background theme/dark-theme-colors))
-      ;; (.add (JLabel. "Radio:"))
       (.add name-field)
-      ;; (.add (JLabel. "URL:"))
       (.add url-field))
 
     (doto form-panel
       (.add add-button BorderLayout/WEST)
       (.add add-panel BorderLayout/CENTER))
 
-    ;; Configuration des panneaux de contrôle (remplacer les boutons par des icônes)
+    ;; Configuration des panneaux de contrôle
     (doto control-panel
       (.setLayout (FlowLayout.))
       (.setBackground (:background theme/dark-theme-colors))
@@ -71,6 +132,20 @@
 
     ;; Initialisation de la liste
     (update-radio-list! radio-list @model/radios)
+
+    ;; Ajout du menu contextuel à la liste
+    (.addMouseListener radio-list
+                       (proxy [MouseAdapter] []
+                         (mousePressed [e]
+                           (when (.isPopupTrigger e)
+                             (let [index (.locationToIndex radio-list (.getPoint e))]
+                               (.setSelectedIndex radio-list index)
+                               (.show popup-menu radio-list (.getX e) (.getY e)))))
+                         (mouseReleased [e]
+                           (when (.isPopupTrigger e)
+                             (let [index (.locationToIndex radio-list (.getPoint e))]
+                               (.setSelectedIndex radio-list index)
+                               (.show popup-menu radio-list (.getX e) (.getY e)))))))
 
     ;; List Selection Listener
     (.addListSelectionListener
@@ -85,7 +160,7 @@
 
     ;; Play Label Action
     (.addMouseListener play-label
-                       (proxy [java.awt.event.MouseAdapter] []
+                       (proxy [MouseAdapter] []
                          (mouseClicked [e]
                            (let [index (.getSelectedIndex radio-list)]
                              (when (>= index 0)
@@ -94,14 +169,14 @@
 
     ;; Stop Label Action
     (.addMouseListener stop-label
-                       (proxy [java.awt.event.MouseAdapter] []
+                       (proxy [MouseAdapter] []
                          (mouseClicked [e]
                            (player/stop-radio)
                            (.setText status-label "--"))))
 
     ;; Previous Label Action
     (.addMouseListener prev-label
-                       (proxy [java.awt.event.MouseAdapter] []
+                       (proxy [MouseAdapter] []
                          (mouseClicked [e]
                            (let [current (.getSelectedIndex radio-list)]
                              (when (> current 0)
@@ -109,7 +184,7 @@
 
     ;; Next Label Action
     (.addMouseListener next-label
-                       (proxy [java.awt.event.MouseAdapter] []
+                       (proxy [MouseAdapter] []
                          (mouseClicked [e]
                            (let [current (.getSelectedIndex radio-list)
                                  max-index (dec (count @model/radios))]
@@ -125,8 +200,8 @@
                               (if (model/add-radio! name url)
                                 (do
                                   (update-radio-list! radio-list @model/radios)
-                                  (.setText name-field "")
-                                  (.setText url-field ""))
+                                  (.setText name-field "Radio")
+                                  (.setText url-field "URL"))
                                 (JOptionPane/showMessageDialog frame
                                                                "Veuillez saisir un nom et une URL valides"
                                                                "Erreur"
