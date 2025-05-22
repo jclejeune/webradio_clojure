@@ -7,6 +7,8 @@
            [java.awt BorderLayout FlowLayout GridLayout]
            [java.awt.event ActionListener MouseAdapter]))
 
+(def ^:private currently-playing-radio (atom nil))
+
 (defn- update-radio-list! [jlist radios]
   (let [model (DefaultListModel.)]
     (doseq [radio radios]
@@ -16,9 +18,9 @@
 ;; Dialogue pour modifier une radio
 (defn- show-edit-dialog [frame radio-name]
   (let [current-radio (first (filter #(= (:name %) radio-name) @model/radios))
-        name-field (JTextField. (:name current-radio) 20)
-        url-field (JTextField. (:url current-radio) 20)
-        panel (JPanel. (GridLayout. 4 4 4 4))]
+        name-field (JTextField. (:name current-radio) 30)
+        url-field (JTextField. (:url current-radio) 30)
+        panel (JPanel. (GridLayout. 2 2 10 5))]
 
     (doto panel
       (.add (JLabel. "Nom:"))
@@ -26,7 +28,7 @@
       (.add (JLabel. "URL:"))
       (.add url-field))
 
-    (let [result (JOptionPane/showConfirmDialog frame panel "Modifier la radio" JOptionPane/OK_CANCEL_OPTION)]
+    (let [result (JOptionPane/showConfirmDialog frame panel "Modifier la radio" JOptionPane/OK_CANCEL_OPTION JOptionPane/PLAIN_MESSAGE)]
       (when (= result JOptionPane/OK_OPTION)
         (let [new-name (.getText name-field)
               new-url (.getText url-field)]
@@ -41,7 +43,7 @@
                 (str "Êtes-vous sûr de vouloir supprimer la radio '" radio-name "' ?")
                 "Confirmer la suppression"
                 JOptionPane/YES_NO_OPTION
-                JOptionPane/QUESTION_MESSAGE)]
+                JOptionPane/PLAIN_MESSAGE)]
     (= result JOptionPane/YES_OPTION)))
 
 ;; Création du menu contextuel
@@ -146,17 +148,44 @@
                              (let [index (.locationToIndex radio-list (.getPoint e))]
                                (.setSelectedIndex radio-list index)
                                (.show popup-menu radio-list (.getX e) (.getY e)))))))
+    (.addMouseListener radio-list
+                       (proxy [MouseAdapter] []
+                         (mouseClicked [e]
+                           ;; Ignorer les clics droits qui sont pour le menu contextuel
+                           (when (= (.getButton e) java.awt.event.MouseEvent/BUTTON1)
+                             (let [index (.locationToIndex radio-list (.getPoint e))
+                                   selected-radio (when (>= index 0) (nth @model/radios index))]
+                               (when (and selected-radio
+                                          ;; Vérifier que le clic est sur un élément
+                                          (.getCellBounds radio-list index index)
+                                          (.contains (.getCellBounds radio-list index index) (.getPoint e))
+                                          ;; Vérifier que ce n'est pas la radio déjà en cours de lecture
+                                          (not= (:name selected-radio) (:name @currently-playing-radio)))
+                                 ;; Jouer la radio seulement si elle est différente
+                                 (player/play-radio selected-radio)
+                                 ;; Mettre à jour la radio en cours
+                                 (reset! currently-playing-radio selected-radio)
+                                 (.setText status-label (.getSelectedValue radio-list))))))))
+
+    ;; Modifie également la fonction stop-radio pour réinitialiser la radio en cours
+    ;; Dans le MouseListener pour stop-label:
+    (.addMouseListener stop-label
+                       (proxy [MouseAdapter] []
+                         (mouseClicked [e]
+                           (player/stop-radio)
+                           (reset! currently-playing-radio nil)
+                           (.setText status-label "--"))))
+
 
     ;; List Selection Listener
-    (.addListSelectionListener
-     radio-list
-     (reify ListSelectionListener
-       (valueChanged [_ e]
-         (when-not (.getValueIsAdjusting e)
-           (let [index (.getSelectedIndex radio-list)]
-             (when (>= index 0)
-               (player/play-radio (nth @model/radios index))
-               (.setText status-label (.getSelectedValue radio-list))))))))
+    (.addListSelectionListener radio-list
+                               (reify ListSelectionListener
+                                 (valueChanged [_ e]
+                                   (when-not (.getValueIsAdjusting e)
+                                     (let [index (.getSelectedIndex radio-list)]
+                                       (when (>= index 0)
+                                         (player/play-radio (nth @model/radios index))
+                                         (.setText status-label (.getSelectedValue radio-list))))))))
 
     ;; Play Label Action
     (.addMouseListener play-label
