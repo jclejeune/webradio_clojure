@@ -237,6 +237,6 @@
       (.setLayout (BorderLayout.))
       (.add status-label BorderLayout/NORTH)
       (.add main-panel BorderLayout/CENTER)
-      (.setSize 400 600)
+      (.setSize 400 400)
       (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)
       (.setVisible true))))
