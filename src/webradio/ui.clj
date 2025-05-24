@@ -2,7 +2,7 @@
   (:require [webradio.model :as model]
             [webradio.player :as player]
             [webradio.theme :as theme])
-  (:import [javax.swing JFrame JList JScrollPane JPanel JTextField JLabel JOptionPane DefaultListModel ImageIcon JPopupMenu JMenuItem]
+  (:import [javax.swing JFrame JList JScrollPane JPanel JTextField JLabel JOptionPane DefaultListModel ImageIcon JPopupMenu JMenuItem JButton]
            [javax.swing.event ListSelectionListener]
            [java.awt BorderLayout FlowLayout GridLayout]
            [java.awt.event ActionListener MouseAdapter]))
@@ -14,6 +14,26 @@
     (doseq [radio radios]
       (.addElement model (:name radio)))
     (.setModel jlist model)))
+
+;; Dialogue pour ajouter une nouvelle radio
+(defn- show-add-dialog [frame]
+  (let [name-field (JTextField. 30)
+        url-field (JTextField. 30)
+        panel (JPanel. (GridLayout. 2 2 10 5))]
+
+    (doto panel
+      (.add (JLabel. "Nom:"))
+      (.add name-field)
+      (.add (JLabel. "URL:"))
+      (.add url-field))
+
+    (let [result (JOptionPane/showConfirmDialog frame panel "Ajouter une nouvelle radio" JOptionPane/OK_CANCEL_OPTION JOptionPane/PLAIN_MESSAGE)]
+      (when (= result JOptionPane/OK_OPTION)
+        (let [new-name (.getText name-field)
+              new-url (.getText url-field)]
+          (when (and (not-empty new-name) (not-empty new-url))
+            (model/add-radio! new-name new-url)
+            true))))))
 
 ;; Dialogue pour modifier une radio
 (defn- show-edit-dialog [frame radio-name]
@@ -85,16 +105,10 @@
   (theme/apply-dark-theme)
 
   (let [frame (JFrame. "WebRadio Player")
-        add-panel (JPanel. (GridLayout. 2 2 5 5))
-        name-field (doto (JTextField. 20)
-                     (.setFont (java.awt.Font. "Arial" java.awt.Font/ITALIC 12))
-                     (.setForeground (:foreground theme/dark-theme-colors))
-                     (.setText "Radio"))
-        url-field (doto (JTextField. 20)
-                    (.setFont (java.awt.Font. "Arial" java.awt.Font/ITALIC 12))
-                    (.setForeground (:foreground theme/dark-theme-colors))
-                    (.setText "URL"))
-        add-button (theme/styled-button "+Add" theme/dark-theme-colors)
+        ;; Panneau de la barre de tâches simplifiée
+        taskbar-panel (JPanel. (FlowLayout. FlowLayout/LEFT))
+        add-button (theme/styled-button "Ajouter Radio" theme/dark-theme-colors)
+
         radio-list (JList.)
         scroll-pane (JScrollPane. radio-list)
         digital-font (theme/load-digital-font 24)
@@ -107,21 +121,15 @@
         prev-label (JLabel. backward-button-icon)
 
         control-panel (JPanel.)
-        form-panel (JPanel. (BorderLayout.))
         main-panel (JPanel. (BorderLayout.))
 
         ;; Création du menu contextuel
         popup-menu (create-popup-menu frame radio-list)]
 
-    ;; Configuration du formulaire
-    (doto add-panel
+    ;; Configuration de la barre de tâches
+    (doto taskbar-panel
       (.setBackground (:background theme/dark-theme-colors))
-      (.add name-field)
-      (.add url-field))
-
-    (doto form-panel
-      (.add add-button BorderLayout/WEST)
-      (.add add-panel BorderLayout/CENTER))
+      (.add add-button))
 
     ;; Configuration des panneaux de contrôle
     (doto control-panel
@@ -148,6 +156,7 @@
                              (let [index (.locationToIndex radio-list (.getPoint e))]
                                (.setSelectedIndex radio-list index)
                                (.show popup-menu radio-list (.getX e) (.getY e)))))))
+
     (.addMouseListener radio-list
                        (proxy [MouseAdapter] []
                          (mouseClicked [e]
@@ -166,16 +175,6 @@
                                  ;; Mettre à jour la radio en cours
                                  (reset! currently-playing-radio selected-radio)
                                  (.setText status-label (.getSelectedValue radio-list))))))))
-
-    ;; Modifie également la fonction stop-radio pour réinitialiser la radio en cours
-    ;; Dans le MouseListener pour stop-label:
-    (.addMouseListener stop-label
-                       (proxy [MouseAdapter] []
-                         (mouseClicked [e]
-                           (player/stop-radio)
-                           (reset! currently-playing-radio nil)
-                           (.setText status-label "--"))))
-
 
     ;; List Selection Listener
     (.addListSelectionListener radio-list
@@ -201,6 +200,7 @@
                        (proxy [MouseAdapter] []
                          (mouseClicked [e]
                            (player/stop-radio)
+                           (reset! currently-playing-radio nil)
                            (.setText status-label "--"))))
 
     ;; Previous Label Action
@@ -220,32 +220,23 @@
                              (when (< current max-index)
                                (.setSelectedIndex radio-list (inc current)))))))
 
-    ;; Add Button Action
+    ;; Action du bouton "Ajouter Radio"
     (.addActionListener add-button
                         (reify ActionListener
                           (actionPerformed [_ _]
-                            (let [name (.getText name-field)
-                                  url (.getText url-field)]
-                              (if (model/add-radio! name url)
-                                (do
-                                  (update-radio-list! radio-list @model/radios)
-                                  (.setText name-field "Radio")
-                                  (.setText url-field "URL"))
-                                (JOptionPane/showMessageDialog frame
-                                                               "Veuillez saisir un nom et une URL valides"
-                                                               "Erreur"
-                                                               JOptionPane/ERROR_MESSAGE))))))
+                            (when (show-add-dialog frame)
+                              (update-radio-list! radio-list @model/radios)))))
 
     ;; Assemblage final
     (doto main-panel
-      (.add form-panel BorderLayout/NORTH)
+      (.add taskbar-panel BorderLayout/NORTH)
       (.add scroll-pane BorderLayout/CENTER)
       (.add control-panel BorderLayout/SOUTH))
 
     (doto frame
       (.setLayout (BorderLayout.))
-      (.add main-panel BorderLayout/CENTER)
       (.add status-label BorderLayout/NORTH)
+      (.add main-panel BorderLayout/CENTER)
       (.setSize 400 600)
       (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)
       (.setVisible true))))
